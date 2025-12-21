@@ -1,5 +1,5 @@
 import { fetchRepoCard } from './cards/repos.js';
-import { fetchWrappedCard } from './cards/wrapped.js';
+import { fetchDayCard } from './cards/day.js';
 import { makeErrorSvg } from './common/utils.js';
 
 export default {
@@ -12,11 +12,11 @@ export default {
       case 'repos':
         return await fetchRepoCard(request, env);
       
-      case 'wrapped':
-        return await fetchWrappedCard(request, env);
+      case 'day':
+        return await fetchDayCard(request, env);
 
       default:
-        return new Response(makeErrorSvg("Invalid type parameter. Use ?type=repos or ?type=wrapped"), {
+        return new Response(makeErrorSvg("Invalid type parameter. Use ?type=repos or ?type=days"), {
           headers: { "Content-Type": "image/svg+xml" }
         });
     }
