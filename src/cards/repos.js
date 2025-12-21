@@ -1,167 +1,196 @@
 import { makeErrorSvg, kFormatter } from '../common/utils.js';
 
 export async function fetchRepoCard(request, env) {
-	const url = new URL(request.url);
-	const username = url.searchParams.get('username');
+  const url = new URL(request.url);
+  const username = url.searchParams.get("username");
+  const title = url.searchParams.get("title") || "Top Contributions";
 
-	// 1. Validation
-	if (!username) {
-		return new Response(makeErrorSvg('Missing parameter: ?username=yourname'), {
-			headers: { 'Content-Type': 'image/svg+xml' },
-		});
-	}
+  if (!username) {
+    return new Response(makeErrorSvg("Missing parameter: ?username=yourname"), {
+      headers: { "Content-Type": "image/svg+xml" }
+    });
+  }
 
-	const headers = {
-		'User-Agent': 'readme-contribution-stats',
-		Authorization: `Bearer ${env.GITHUB_TOKEN}`,
-		Accept: 'application/vnd.github.v3+json',
-	};
+  const headers = {
+    "User-Agent": "readme-contribution-stats",
+    "Authorization": `Bearer ${env.GITHUB_TOKEN}`,
+    "Accept": "application/vnd.github.v3+json"
+  };
 
-	// 2. Fetch recent merged PRs (Limit 100)
-	const query = `is:pr is:merged is:public author:${username} -user:${username}`;
-	const searchUrl = `https://api.github.com/search/issues?q=${encodeURIComponent(query)}&per_page=100`;
+  const query = `is:pr is:merged is:public author:${username} -user:${username}`;
+  const searchUrl = `https://api.github.com/search/issues?q=${encodeURIComponent(query)}&per_page=100`;
 
-	try {
-		const searchRes = await fetch(searchUrl, { headers });
-		if (!searchRes.ok) throw new Error(`GitHub API Error: ${searchRes.status}`);
-		const searchData = await searchRes.json();
+  try {
+    const searchRes = await fetch(searchUrl, { headers });
+    if (!searchRes.ok) throw new Error(`GitHub API Error: ${searchRes.status}`);
+    const searchData = await searchRes.json();
 
-		// 3. Aggregate Data
-		const repoMap = new Map();
+    const repoMap = new Map();
 
-		for (const item of searchData.items) {
-			const repoUrl = item.repository_url;
-			const repoFullName = repoUrl.split('/repos/')[1];
-			const [owner, name] = repoFullName.split('/');
+    for (const item of searchData.items) {
+      const repoUrl = item.repository_url;
+      const repoFullName = repoUrl.split("/repos/")[1]; 
+      const [owner, name] = repoFullName.split("/");
 
-			if (owner.toLowerCase() === username.toLowerCase()) continue;
+      if (owner.toLowerCase() === username.toLowerCase()) continue;
 
-			if (!repoMap.has(repoFullName)) {
-				repoMap.set(repoFullName, {
-					fullName: repoFullName,
-					name: name,
-					owner: owner,
-					apiUrl: repoUrl,
-					prCount: 1,
-					ownerAvatar: `https://github.com/${owner}.png?size=64`,
-				});
-			} else {
-				repoMap.get(repoFullName).prCount += 1;
-			}
-		}
+      let type = "Code"; 
+      const textToCheck = (item.title + (item.labels || []).map(l => l.name).join(" ")).toLowerCase();
+      
+      if (textToCheck.includes("doc") || textToCheck.includes("readme") || textToCheck.includes("typo") || textToCheck.includes("edit")) {
+        type = "Docs";
+      }
 
-		// 4. Select Repos to Process (Process up to 50 unique repos)
-		let reposToCheck = Array.from(repoMap.values()).slice(0, 50);
+      if (!repoMap.has(repoFullName)) {
+        repoMap.set(repoFullName, {
+          fullName: repoFullName,
+          name: name,
+          owner: owner,
+          apiUrl: repoUrl,
+          prCount: 1,
+          types: new Set([type]), 
+          ownerAvatar: `https://github.com/${owner}.png?size=64`
+        });
+      } else {
+        const repo = repoMap.get(repoFullName);
+        repo.prCount += 1;
+        repo.types.add(type);
+      }
+    }
 
-		// 5. Fetch Details (Stars) in Parallel
-		const detailsPromises = reposToCheck.map(async (repo) => {
-			try {
-				const res = await fetch(repo.apiUrl, { headers });
-				if (!res.ok) return null;
-				const data = await res.json();
+    let reposToCheck = Array.from(repoMap.values()).slice(0, 50);
 
-				const imgRes = await fetch(repo.ownerAvatar);
-				const imgBuf = await imgRes.arrayBuffer();
-				const base64 = btoa(String.fromCharCode(...new Uint8Array(imgBuf)));
+    const detailsPromises = reposToCheck.map(async (repo) => {
+      try {
+        const res = await fetch(repo.apiUrl, { headers });
+        if(!res.ok) return null;
+        const data = await res.json();
+        
+        const imgRes = await fetch(repo.ownerAvatar);
+        const imgBuf = await imgRes.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(imgBuf)));
 
-				return {
-					...repo,
-					stars: data.stargazers_count,
-					base64: base64,
-				};
-			} catch (e) {
-				return null;
-			}
-		});
+        const typeArray = Array.from(repo.types);
+        let finalType = typeArray[0];
+        if (typeArray.includes("Code") && typeArray.includes("Docs")) finalType = "Code + Docs";
+        
+        return {
+          ...repo,
+          stars: data.stargazers_count,
+          base64: base64,
+          contributionType: finalType
+        };
+      } catch (e) {
+        return null;
+      }
+    });
 
-		let enrichedRepos = (await Promise.all(detailsPromises)).filter((r) => r !== null);
+    let enrichedRepos = (await Promise.all(detailsPromises)).filter(r => r !== null);
 
-		// 6. SORTING LOGIC: Stars first, then PR count
-		enrichedRepos.sort((a, b) => {
-			const starDiff = b.stars - a.stars; // Compare stars
-			if (starDiff !== 0) return starDiff; // If different, use star sort
-			return b.prCount - a.prCount; // If same, use PR count sort
-		});
+    enrichedRepos.sort((a, b) => {
+      const starDiff = b.stars - a.stars;
+      if (starDiff !== 0) return starDiff;
+      return b.prCount - a.prCount;
+    });
+    
+    enrichedRepos = enrichedRepos.slice(0, 6); 
 
-		// Keep Top 8
-		enrichedRepos = enrichedRepos.slice(0, 8);
+    if (enrichedRepos.length === 0) {
+      return new Response(makeErrorSvg("No external contributions found"), { headers: { "Content-Type": "image/svg+xml" } });
+    }
 
-		if (enrichedRepos.length === 0) {
-			return new Response(makeErrorSvg('No external contributions found in last 100 PRs'), {
-				headers: { 'Content-Type': 'image/svg+xml' },
-			});
-		}
+    const svg = generateCardSvg(enrichedRepos, title);
 
-		// 7. Generate SVG
-		const svg = generateCardSvg(enrichedRepos);
+    return new Response(svg, {
+      headers: {
+        "Content-Type": "image/svg+xml",
+        "Cache-Control": "public, max-age=14400"
+      }
+    });
 
-		return new Response(svg, {
-			headers: {
-				'Content-Type': 'image/svg+xml',
-				'Cache-Control': 'public, max-age=14400',
-			},
-		});
-	} catch (err) {
-		return new Response(makeErrorSvg(err.message), { status: 500 });
-	}
+  } catch (err) {
+    return new Response(makeErrorSvg(err.message), { status: 500 });
+  }
 }
 
-function generateCardSvg(repos) {
-	const cardWidth = 400;
-	const cardHeight = 50;
-	const gap = 10;
-	const columns = 2;
-	const padding = 10;
+function generateCardSvg(repos, title) {
+  const cardWidth = 400; 
+  const cardHeight = 60; 
+  const gap = 15;
+  const columns = 2; 
+  const padding = 20;
+  const headerHeight = 40; 
 
-	const totalWidth = columns * cardWidth + (columns - 1) * gap + padding * 2;
-	const rows = Math.ceil(repos.length / columns);
-	const totalHeight = rows * cardHeight + (rows - 1) * gap + padding * 2;
+  const totalWidth = (columns * cardWidth) + ((columns - 1) * gap) + (padding * 2);
+  const rows = Math.ceil(repos.length / columns);
+  const totalHeight = headerHeight + (rows * cardHeight) + ((rows - 1) * gap) + (padding * 2);
 
-	let content = repos
-		.map((repo, i) => {
-			const col = i % columns;
-			const row = Math.floor(i / columns);
-			const x = padding + col * (cardWidth + gap);
-			const y = padding + row * (cardHeight + gap);
+  const iconCode = `<path d="M4.72 3.22a.75.75 0 011.06 1.06L2.06 8l3.72 3.72a.75.75 0 11-1.06 1.06L.47 8.53a.75.75 0 010-1.06l4.25-4.25zm11.56 0a.75.75 0 10-1.06 1.06L18.94 8l-3.72 3.72a.75.75 0 101.06 1.06l4.25-4.25a.75.75 0 000-1.06l-4.25-4.25z" transform="translate(0, -6) scale(0.7)"/>`;
+  const iconDocs = `<path d="M0 1.75A.75.75 0 01.75 1h4.253c1.227 0 2.317.59 3 1.501A3.744 3.744 0 0111.006 1h4.245a.75.75 0 01.75.75v10.5a.75.75 0 01-.75.75h-4.507a2.25 2.25 0 00-1.591.659l-.622.621a.75.75 0 01-1.06 0l-.622-.621A2.25 2.25 0 005.258 13H.75a.75.75 0 01-.75-.75V1.75zm8.755 3a2.25 2.25 0 012.25-2.25H14.5v9h-3.757c-.71 0-1.4.201-1.992.572l.004-7.322zm-1.504 7.324l.004-5.073-.002-2.253A2.25 2.25 0 005.003 2.5H1.5v9h3.757a3.676 3.676 0 011.997.574z" transform="translate(0, -6) scale(0.7)"/>`;
 
-			return `
+  let content = repos.map((repo, i) => {
+    const col = i % columns;
+    const row = Math.floor(i / columns);
+    const x = padding + (col * (cardWidth + gap));
+    const y = headerHeight + padding + (row * (cardHeight + gap));
+
+    let typeIcon = iconCode;
+    if (repo.contributionType === "Docs") typeIcon = iconDocs;
+    
+    return `
       <g transform="translate(${x}, ${y})">
-        <rect width="${cardWidth}" height="${cardHeight}" rx="6" fill="#ffffff" stroke="#e1e4e8" class="card-bg" />
-        <image x="10" y="8" width="34" height="34" href="data:image/png;base64,${repo.base64}" clip-path="inset(0% round 50%)" />
-        <text x="55" y="20" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-weight="600" font-size="14" fill="#0366d6" class="repo-name">${
-					repo.name
-				}</text>
-        <g transform="translate(55, 38)" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#586069" class="stats-text">
-          <g transform="translate(0, 0)"> 
-            <path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.719-4.192-3.046-2.97a.75.75 0 01.416-1.28l4.21-.612L7.327.668A.75.75 0 018 .25z" transform="translate(0, -7) scale(0.8)" />
-            <text x="16" y="0" dominant-baseline="middle">${kFormatter(repo.stars)}</text>
-          </g>
-          <g transform="translate(65, 0)">
-            <path d="M7.177 3.073L9.573.677A.25.25 0 0110 .854v4.792a.25.25 0 01-.427.177L7.177 3.427a.25.25 0 010-.354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122v5.256a2.25 2.25 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zM11 2.5h-1V4h1a1 1 0 011 1v5.628a2.25 2.25 0 101.5 0V5A2.5 2.5 0 0011 2.5zm1 10.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0zM3.75 12a.75.75 0 100 1.5.75.75 0 000-1.5z" transform="translate(0, -7) scale(0.7)" />
-            <text x="16" y="0" dominant-baseline="middle">${repo.prCount} merged</text>
-          </g>
+        <rect width="${cardWidth}" height="${cardHeight}" rx="8" fill="#ffffff" stroke="#e1e4e8" class="card-bg" />
+        
+        <image x="15" y="13" width="34" height="34" href="data:image/png;base64,${repo.base64}" clip-path="inset(0% round 50%)" />
+        
+        <text x="60" y="24" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-weight="600" font-size="14" fill="#0969da" class="repo-name">${repo.name}</text>
+
+        <g transform="translate(60, 44)" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="11" fill="#586069" class="stats-text">
+           
+           <g transform="translate(0, 0)">
+              ${typeIcon}
+              <text x="16" y="0" dominant-baseline="middle">${repo.contributionType}</text>
+           </g>
+
+           <g transform="translate(100, 0)">
+              <path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.719-4.192-3.046-2.97a.75.75 0 01.416-1.28l4.21-.612L7.327.668A.75.75 0 018 .25z" 
+                transform="translate(0, -6) scale(0.7)"/>
+              <text x="14" y="0" dominant-baseline="middle">${kFormatter(repo.stars)}</text>
+              
+              <path d="M7.177 3.073L9.573.677A.25.25 0 0110 .854v4.792a.25.25 0 01-.427.177L7.177 3.427a.25.25 0 010-.354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122v5.256a2.25 2.25 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zM11 2.5h-1V4h1a1 1 0 011 1v5.628a2.25 2.25 0 101.5 0V5A2.5 2.5 0 0011 2.5zm1 10.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0zM3.75 12a.75.75 0 100 1.5.75.75 0 000-1.5z" 
+                transform="translate(65, -6) scale(0.6)"/>
+              <text x="80" y="0" dominant-baseline="middle">${repo.prCount} merged</text>
+           </g>
         </g>
       </g>
     `;
-		})
-		.join('');
+  }).join('');
 
-	return `
+  return `
     <svg width="${totalWidth}" height="${totalHeight}" viewBox="0 0 ${totalWidth} ${totalHeight}" xmlns="http://www.w3.org/2000/svg">
       <style>
         .card-bg { fill: #ffffff; stroke: #e1e4e8; }
-        .repo-name { fill: #0366d6; }
+        .repo-name { fill: #0969da; }
         .stats-text { fill: #586069; }
+        .title { fill: #24292f; }
         path { fill: #586069; }
+        
         @media (prefers-color-scheme: dark) {
           .card-bg { fill: #0d1117; stroke: #30363d; }
           .repo-name { fill: #58a6ff; }
           .stats-text { fill: #8b949e; }
+          .title { fill: #c9d1d9; }
           path { fill: #8b949e; }
         }
-        image { animation: fadeIn 0.5s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
       </style>
+
+      <g transform="translate(25, 30)">
+        <text class="title fade-in" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-weight="bold" font-size="22">${title}</text>
+      </g>
+
       ${content}
     </svg>
   `;
