@@ -1,17 +1,4 @@
 export async function renderHomePage(env) {
-	let stars = 'Unknown';
-	try {
-		const repoRes = await fetch('https://api.github.com/repos/amankumarconnect/readme-contribution-stats', {
-			headers: { 'User-Agent': 'readme-contribution-stats-worker' },
-		});
-		if (repoRes.ok) {
-			const repoData = await repoRes.json();
-			stars = repoData.stargazers_count;
-		}
-	} catch (e) {
-		console.error('Failed to fetch stars', e);
-	}
-
 	const html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -214,7 +201,7 @@ export async function renderHomePage(env) {
             <h1>Readme Contribution Stats</h1>
             <a href="https://github.com/amankumarconnect/readme-contribution-stats" target="_blank" class="stars-badge">
                 <svg height="16" viewBox="0 0 16 16" version="1.1" width="16" aria-hidden="true"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"></path></svg>
-                ${stars} Stars
+                <span id="repo-stars">...</span> Stars
             </a>
         </div>
         <form id="statsForm">
@@ -256,6 +243,21 @@ export async function renderHomePage(env) {
         const markdownCode = document.getElementById('markdownCode');
         const copyBtn = document.getElementById('copyBtn');
         const starPrompt = document.getElementById('starPrompt');
+
+        // Fetch stars client-side to avoid blocking page load and reduce server-side rate limiting
+        fetch('https://api.github.com/repos/amankumarconnect/readme-contribution-stats')
+            .then(res => res.json())
+            .then(data => {
+                if (data.stargazers_count !== undefined) {
+                    document.getElementById('repo-stars').textContent = data.stargazers_count;
+                } else {
+                    document.getElementById('repo-stars').textContent = 'Unknown';
+                }
+            })
+            .catch(e => {
+                console.error('Failed to fetch stars', e);
+                document.getElementById('repo-stars').textContent = 'Unknown';
+            });
 
         form.addEventListener('submit', (e) => {
             e.preventDefault();
