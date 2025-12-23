@@ -6,6 +6,7 @@ export async function renderHomePage(env) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Readme Contribution Stats</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2338a169'%3E%3Cpath d='M12 2.5a9.5 9.5 0 100 19 9.5 9.5 0 000-19zM1 12C1 5.925 5.925 1 12 1s11 4.925 11 11-4.925 11-11 11S1 18.075 1 12z'/%3E%3Cpath d='M12 14.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zm0 1.5a4 4 0 110-8 4 4 0 010 8z'/%3E%3Cpath d='M12 5a7 7 0 00-7 7h1.5a5.5 5.5 0 1111 0H19a7 7 0 00-7-7z'/%3E%3C/svg%3E">
     <style>
         :root {
             --gray-0: #f6f8fa;
@@ -201,7 +202,7 @@ export async function renderHomePage(env) {
             <h1>Readme Contribution Stats</h1>
             <a href="https://github.com/amankumarconnect/readme-contribution-stats" target="_blank" class="stars-badge">
                 <svg height="16" viewBox="0 0 16 16" version="1.1" width="16" aria-hidden="true"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"></path></svg>
-                <span id="repo-stars">...</span> Stars
+                <span id="repo-stars">...</span>&nbsp;Stars
             </a>
         </div>
         <form id="statsForm">
@@ -232,7 +233,7 @@ export async function renderHomePage(env) {
     </div>
 
     <div class="footer">
-        <p>Made with love by <a href="https://github.com/amankumarconnect" target="_blank">aman</a></p>
+        <p>Made with ❤️ by <a href="https://github.com/amankumarconnect" target="_blank">aman</a></p>
     </div>
 
     <script>
