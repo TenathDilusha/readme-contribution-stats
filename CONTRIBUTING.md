@@ -52,7 +52,7 @@ This section guides you through submitting an enhancement suggestion for Readme 
 1.  **Fork the repository** on GitHub.
 2.  **Clone your fork** locally:
     ```bash
-    git clone https://github.com/your-username/readme-contribution-stats.git
+    git clone https://github.com/amankumarconnect/readme-contribution-stats.git
     cd readme-contribution-stats
     ```
 3.  **Install dependencies**:

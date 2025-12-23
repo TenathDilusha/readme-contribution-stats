@@ -2,6 +2,7 @@ import { fetchRepoCard } from './cards/repos.js';
 import { fetchDayCard } from './cards/day.js';
 import { fetchHourCard } from './cards/hour.js';
 import { makeErrorSvg, makeBadgeSvg } from './common/utils.js';
+import { renderHomePage } from './pages/home.js';
 
 async function trackUser(env, username) {
 	if (!username) return;
@@ -22,6 +23,11 @@ async function trackUser(env, username) {
 export default {
 	async fetch(request, env, ctx) {
 		const url = new URL(request.url);
+
+		if (!url.searchParams.has('type') && !url.searchParams.has('username')) {
+			return await renderHomePage(env);
+		}
+
 		const type = url.searchParams.get('type') || 'repos'; // Default to 'repos'
 		const username = url.searchParams.get('username');
 
