@@ -67,9 +67,15 @@ export async function fetchRepoCard(request, env) {
 			}
 		}
 
-		// Limit to 40 to avoid subrequest limits (40 details + ~6 avatars < 50)
+		// Limit the number of repositories to check to avoid hitting the 50 subrequest limit
+		// We use 1 request for search, and potentially 1 for user fetch.
+		// We need 'limit' requests for avatars.
+		// The rest can be used for fetching repo details.
+		const safeSubrequests = 48; // 50 - 2 (search + user)
+		const maxDetails = Math.max(0, safeSubrequests - limit);
+
 		// We fetch more than the requested limit to ensure we have enough candidates after filtering/sorting
-		let reposToCheck = Array.from(repoMap.values()).slice(0, 40);
+		let reposToCheck = Array.from(repoMap.values()).slice(0, maxDetails);
 
 		const detailsPromises = reposToCheck.map(async (repo) => {
 			try {

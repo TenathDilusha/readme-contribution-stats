@@ -18,7 +18,7 @@ describe('Hello World worker', () => {
 		await waitOnExecutionContext(ctx);
 		const text = await response.text();
 		expect(text).toContain('<!DOCTYPE html>');
-		expect(text).toContain('123 Stars');
+		expect(text).toContain('Readme Contribution Stats');
 	});
 
 	it('responds with Error SVG when type=repos and no username (integration style)', async () => {
