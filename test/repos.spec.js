@@ -39,10 +39,14 @@ describe('Repo Card', () => {
 					json: async () => ({ items: searchItems }),
 				};
 			}
-			if (urlStr.includes('api.github.com/repos/')) {
+			if (urlStr.includes('api.github.com/graphql')) {
+				const data = {};
+				for (let i = 0; i < 60; i++) {
+					data[`repo${i}`] = { stargazerCount: 100 + i };
+				}
 				return {
 					ok: true,
-					json: async () => ({ stargazers_count: 100 }),
+					json: async () => ({ data }),
 				};
 			}
 			if (urlStr.includes('.png')) {
@@ -61,7 +65,7 @@ describe('Repo Card', () => {
 		const calls = globalThis.fetch.mock.calls.length;
 		console.log(`Total fetch calls: ${calls}`);
 
-		// 1 (user) + 1 (search) + maxDetails (38) + limit (10) = 50
-		expect(calls).toBeLessThanOrEqual(50);
+		// 1 (user) + 1 (search) + 1 (graphql) + limit (10) = 13
+		expect(calls).toBeLessThanOrEqual(20);
 	});
 });

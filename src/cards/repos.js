@@ -67,39 +67,60 @@ export async function fetchRepoCard(request, env) {
 			}
 		}
 
-		// Limit the number of repositories to check to avoid hitting the 50 subrequest limit
-		// We use 1 request for search, and potentially 1 for user fetch.
-		// We need 'limit' requests for avatars.
-		// The rest can be used for fetching repo details.
-		const safeSubrequests = 48; // 50 - 2 (search + user)
-		const maxDetails = Math.max(0, safeSubrequests - limit);
+		// Limit the number of repositories to check.
+		// With GraphQL, we can fetch details for many repos in 1 request.
+		// We still need to be mindful of the total subrequests for avatars (limit).
+		// 1 search + 1 user + 1 graphql + limit avatars.
+		// If limit is 20, total is 23. Safe.
+		// We can check up to 100 repos from search results, but let's cap at 60 to be safe with query size.
+		let reposToCheck = Array.from(repoMap.values()).slice(0, 60);
 
-		// We fetch more than the requested limit to ensure we have enough candidates after filtering/sorting
-		let reposToCheck = Array.from(repoMap.values()).slice(0, maxDetails);
-
-		const detailsPromises = reposToCheck.map(async (repo) => {
-			try {
-				const res = await fetch(repo.apiUrl, { headers });
-				if (!res.ok) return null;
-				const data = await res.json();
-
-				// Avatar fetching moved to after sorting/slicing to save requests
-
-				const typeArray = Array.from(repo.types);
-				let finalType = typeArray[0];
-				if (typeArray.includes('Code') && typeArray.includes('Docs')) finalType = 'Code + Docs';
-
-				return {
-					...repo,
-					stars: data.stargazers_count,
-					contributionType: finalType,
-				};
-			} catch (e) {
-				return null;
-			}
+		// Fetch details (stars) using GraphQL to save requests
+		const queryParts = reposToCheck.map((repo, index) => {
+			// GitHub usernames/repo names are generally safe for unescaped GraphQL string interpolation
+			// but let's be safe against quotes
+			const safeOwner = repo.owner.replace(/"/g, '\\"');
+			const safeName = repo.name.replace(/"/g, '\\"');
+			return `repo${index}: repository(owner: "${safeOwner}", name: "${safeName}") { stargazerCount }`;
 		});
 
-		let enrichedRepos = (await Promise.all(detailsPromises)).filter((r) => r !== null);
+		const graphqlQuery = `query { ${queryParts.join('\n')} }`;
+
+		let repoDetails = {};
+		try {
+			const graphqlRes = await fetch('https://api.github.com/graphql', {
+				method: 'POST',
+				headers: {
+					'User-Agent': 'readme-contribution-stats',
+					Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ query: graphqlQuery }),
+			});
+
+			if (graphqlRes.ok) {
+				const graphqlData = await graphqlRes.json();
+				repoDetails = graphqlData.data || {};
+			}
+		} catch (e) {
+			console.error('GraphQL fetch failed', e);
+			// Fallback or continue with 0 stars?
+		}
+
+		let enrichedRepos = reposToCheck.map((repo, index) => {
+			const details = repoDetails[`repo${index}`];
+			const stars = details ? details.stargazerCount : 0;
+
+			const typeArray = Array.from(repo.types);
+			let finalType = typeArray[0];
+			if (typeArray.includes('Code') && typeArray.includes('Docs')) finalType = 'Code + Docs';
+
+			return {
+				...repo,
+				stars: stars,
+				contributionType: finalType,
+			};
+		});
 
 		enrichedRepos.sort((a, b) => {
 			if (sort === 'stars') {
