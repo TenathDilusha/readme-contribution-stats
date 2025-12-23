@@ -81,7 +81,7 @@ export async function fetchRepoCard(request, env) {
 			// but let's be safe against quotes
 			const safeOwner = repo.owner.replace(/"/g, '\\"');
 			const safeName = repo.name.replace(/"/g, '\\"');
-			return `repo${index}: repository(owner: "${safeOwner}", name: "${safeName}") { stargazerCount }`;
+			return `repo${index}: repository(owner: "${safeOwner}", name: "${safeName}") { stargazerCount, owner { avatarUrl(size: 64) } }`;
 		});
 
 		const graphqlQuery = `query { ${queryParts.join('\n')} }`;
@@ -110,6 +110,7 @@ export async function fetchRepoCard(request, env) {
 		let enrichedRepos = reposToCheck.map((repo, index) => {
 			const details = repoDetails[`repo${index}`];
 			const stars = details ? details.stargazerCount : 0;
+			const avatarUrl = details && details.owner ? details.owner.avatarUrl : repo.ownerAvatar;
 
 			const typeArray = Array.from(repo.types);
 			let finalType = typeArray[0];
@@ -118,6 +119,7 @@ export async function fetchRepoCard(request, env) {
 			return {
 				...repo,
 				stars: stars,
+				ownerAvatar: avatarUrl,
 				contributionType: finalType,
 			};
 		});

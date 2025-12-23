@@ -42,7 +42,10 @@ describe('Repo Card', () => {
 			if (urlStr.includes('api.github.com/graphql')) {
 				const data = {};
 				for (let i = 0; i < 60; i++) {
-					data[`repo${i}`] = { stargazerCount: 100 + i };
+					data[`repo${i}`] = {
+						stargazerCount: 100 + i,
+						owner: { avatarUrl: `https://avatars.githubusercontent.com/u/${i}?v=4` },
+					};
 				}
 				return {
 					ok: true,
